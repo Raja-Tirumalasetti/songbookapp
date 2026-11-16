@@ -1,0 +1,193 @@
+/* Extras CSS: White and Rose Palette & Fullscreen Worship Mode */
+
+:root,
+[data-theme=light] {
+  --bg: #fff8f8;
+  --bg2: #ffffff;
+  --card: rgba(180, 35, 74, 0.045);
+  --bd: rgba(180, 35, 74, 0.18);
+  --tx: #29151a;
+  --mut: #805e68;
+  --ac: #b4234a;
+  --ac2: #d94868;
+  --on: #ffffff;
+  --glow: rgba(212, 72, 104, 0.10);
+  --glow2: rgba(240, 170, 190, 0.16);
+  --dot: #b4234a;
+  --panel: radial-gradient(120% 90% at 50% -10%, #ffffff 0%, #fff6f7 65%, #fae7ec 100%);
+}
+
+/* ===== WORSHIP MODE FULLSCREEN STYLES ===== */
+#wm {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: var(--bg);
+  color: var(--tx);
+  animation: lfade .3s both;
+  transition: opacity .25s;
+  overflow: hidden;
+}
+
+#wm.out {
+  opacity: 0;
+}
+
+.wm-bg-watermark {
+  position: absolute;
+  inset: 0;
+  background-image: url('assets/bg_church.jpg');
+  background-position: center 45%;
+  background-repeat: no-repeat;
+  background-size: min(78vw, 760px) auto;
+  opacity: 0.12;
+  filter: contrast(1.1) brightness(0.9);
+  pointer-events: none;
+}
+
+[data-theme=light] .wm-bg-watermark {
+  opacity: 0.07;
+}
+
+#wm .wm-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: opacity .4s, transform .4s;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#wm .wm-top {
+  top: 0;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 18px;
+  background: linear-gradient(var(--bg) 60%, transparent);
+}
+
+#wm .wm-bot {
+  bottom: 0;
+  justify-content: space-between;
+  padding: 18px 16px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--bg) 60%);
+}
+
+#wm.hide .wm-top {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+#wm.hide .wm-bot {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+#wm .wm-b {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--bd);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx);
+  transition: transform .15s, background .2s;
+}
+
+#wm .wm-b:active {
+  transform: scale(0.94);
+}
+
+#wm .wm-b:disabled {
+  opacity: .25;
+  pointer-events: none;
+}
+
+#wm .wm-t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#wm .wm-t b {
+  font-family: var(--serif);
+  font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ac2);
+}
+
+#wm .wm-t small {
+  color: var(--mut);
+  font-size: 13px;
+}
+
+#wm .wm-ctl {
+  display: flex;
+  gap: 8px;
+}
+
+#wm .wm-n {
+  font-family: var(--serif);
+  color: var(--ac);
+  letter-spacing: .1em;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+#wm .wm-stage {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  outline: 0;
+  padding: calc(90px + env(safe-area-inset-top)) 24px calc(100px + env(safe-area-inset-bottom));
+}
+
+#wm .wm-ly {
+  max-width: 780px;
+  margin: 0 auto;
+  text-align: center;
+  font-family: var(--serif);
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+  transition: font-size .2s;
+}
+
+#wm .wm-ly p {
+  margin: 0 0 1.8em;
+}
+
+#wm .wm-l {
+  animation: wmL .35s cubic-bezier(.2, .8, .2, 1);
+}
+
+#wm .wm-r {
+  animation: wmR .35s cubic-bezier(.2, .8, .2, 1);
+}
+
+@keyframes wmL {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+}
+
+@keyframes wmR {
+  from {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+}

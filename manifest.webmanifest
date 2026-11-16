@@ -1,0 +1,36 @@
+{
+  "name": "Maranatha Visvasa Samajam - Songs Book",
+  "short_name": "Maranatha Songs",
+  "description": "Maranatha Visvasa Samajam Songs & Hymns Book - Lyrics anywhere, works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff8f8",
+  "theme_color": "#fff8f8",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "id": "./",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "prefer_related_applications": false,
+  "categories": [
+    "music",
+    "lifestyle",
+    "books"
+  ]
+}
