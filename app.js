@@ -134,12 +134,10 @@
 
   async function loadSongs() {
     let baseSongs = [];
-    let loadedFromServer = false;
     try {
       const r = await fetch('/api/songs').catch(() => null);
       if (r && r.ok) {
         baseSongs = await r.json();
-        loadedFromServer = Array.isArray(baseSongs);
       } else {
         const fileR = await fetch('songs.json');
         baseSongs = parseSongs(await fileR.text());
@@ -150,8 +148,8 @@
 
     if (!Array.isArray(baseSongs)) baseSongs = [];
 
-    const customSongs = loadedFromServer ? [] : LS.g('custom_songs', []);
-    const deletedIds = new Set(loadedFromServer ? [] : LS.g('deleted_songs', []));
+    const customSongs = LS.g('custom_songs', []);
+    const deletedIds = new Set(LS.g('deleted_songs', []));
 
     const mergedMap = new Map();
     baseSongs.forEach(s => {
@@ -1010,20 +1008,36 @@ You comforted me in the valley of tears.`
             const validSongs = imported.filter(song => song.title && (song.lyrics?.te || song.lyrics?.rom));
             if (!validSongs.length) throw new Error('No songs with lyrics were found in the file');
 
+            for (const songId of LS.g('deleted_songs', [])) {
+              const response = await fetch(`/api/songs/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+              if (!response.ok && response.status !== 404) {
+                throw new Error('The server could not apply a saved deletion');
+              }
+            }
+
             for (const song of validSongs) {
               const existingSong = song.id && by[song.id];
               const endpoint = existingSong ? `/api/songs/${encodeURIComponent(song.id)}` : '/api/songs';
-              const response = await fetch(endpoint, {
+              let response = await fetch(endpoint, {
                 method: existingSong ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...song, id: song.id || slugify(song.title) })
               });
+              if (existingSong && response.status === 404) {
+                response = await fetch('/api/songs', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(song)
+                });
+              }
               if (!response.ok) {
                 const result = await response.json().catch(() => ({}));
                 throw new Error(result.error || 'The server rejected a song');
               }
             }
 
+            LS.s('custom_songs', []);
+            LS.s('deleted_songs', []);
             await loadSongs();
             toast(`Imported ${validSongs.length} songs to the shared library`);
             render();
