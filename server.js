@@ -2,16 +2,20 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { neon } = require('@neondatabase/serverless');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
 const DEFAULT_SONGS_FILE = path.join(PUBLIC_DIR, 'songs.json');
 const SONGS_FILE = process.env.SONGS_FILE ? path.resolve(process.env.SONGS_FILE) : DEFAULT_SONGS_FILE;
+const DATABASE_URL = process.env.DATABASE_URL || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const MIN_ADMIN_PASSWORD_LENGTH = 16;
 const ADMIN_SESSION_TTL = 12 * 60 * 60 * 1000;
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
+let databaseClient;
+let databaseInitialization;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -57,6 +61,55 @@ function writeSongsSafe(songs) {
     console.error('Error writing songs.json:', err);
     return false;
   }
+}
+
+function getDatabase() {
+  if (!DATABASE_URL) return null;
+  if (!databaseClient) databaseClient = neon(DATABASE_URL);
+  return databaseClient;
+}
+
+async function initializeDatabase(sql) {
+  if (!databaseInitialization) {
+    databaseInitialization = (async () => {
+      await sql`CREATE TABLE IF NOT EXISTS songbook_state (
+        id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+        songs JSONB NOT NULL
+      )`;
+      const initialSongs = readSongsSafe();
+      await sql`INSERT INTO songbook_state (id, songs)
+        VALUES (TRUE, ${JSON.stringify(initialSongs)}::jsonb)
+        ON CONFLICT (id) DO NOTHING`;
+    })().catch(error => {
+      databaseInitialization = null;
+      throw error;
+    });
+  }
+  await databaseInitialization;
+}
+
+async function readSongs() {
+  const sql = getDatabase();
+  if (!sql) return readSongsSafe();
+  await initializeDatabase(sql);
+  const rows = await sql`SELECT songs FROM songbook_state WHERE id = TRUE`;
+  return rows[0]?.songs || [];
+}
+
+async function writeSongs(songs) {
+  const sql = getDatabase();
+  if (!sql) {
+    if (!writeSongsSafe(songs)) throw new Error('Unable to write songs file');
+    return true;
+  }
+  await initializeDatabase(sql);
+  await sql`UPDATE songbook_state SET songs = ${JSON.stringify(songs)}::jsonb WHERE id = TRUE`;
+  return true;
+}
+
+function sendStorageError(res, error) {
+  console.error('Song storage error:', error);
+  return sendJson(res, 503, { ok: false, error: 'Song storage is temporarily unavailable' });
 }
 
 function slugify(text) {
@@ -159,14 +212,18 @@ const server = http.createServer(async (req, res) => {
 
   // API Routes
   if (pathname === '/api/status') {
-    const songs = readSongsSafe();
-    return sendJson(res, 200, {
-      ok: true,
-      name: 'Maranatha Visvasa Samajam Songbook API',
-      church: 'Maranatha Visvasa Samajam',
-      songsCount: songs.length,
-      time: new Date().toISOString()
-    });
+    try {
+      const songs = await readSongs();
+      return sendJson(res, 200, {
+        ok: true,
+        name: 'Maranatha Visvasa Samajam Songbook API',
+        church: 'Maranatha Visvasa Samajam',
+        songsCount: songs.length,
+        time: new Date().toISOString()
+      });
+    } catch (err) {
+      return sendStorageError(res, err);
+    }
   }
 
   if (pathname === '/api/admin/status' && req.method === 'GET') {
@@ -215,8 +272,12 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/songs') {
     if (req.method === 'GET') {
-      const songs = readSongsSafe();
-      return sendJson(res, 200, songs);
+      try {
+        const songs = await readSongs();
+        return sendJson(res, 200, songs);
+      } catch (err) {
+        return sendStorageError(res, err);
+      }
     }
 
     if (req.method === 'POST') {
@@ -227,7 +288,7 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { ok: false, error: 'Song title is required' });
         }
 
-        const songs = readSongsSafe();
+        const songs = await readSongs();
         const rawId = body.id ? slugify(body.id) : slugify(body.title);
         let id = rawId;
         let counter = 1;
@@ -260,7 +321,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         songs.unshift(newSong); // Add to beginning so newly added songs show up first
-        writeSongsSafe(songs);
+        await writeSongs(songs);
 
         return sendJson(res, 201, {
           ok: true,
@@ -281,7 +342,7 @@ const server = http.createServer(async (req, res) => {
     const songId = pathname.replace('/api/songs/', '').trim();
     try {
       const body = await parseBody(req);
-      const songs = readSongsSafe();
+      const songs = await readSongs();
       const index = songs.findIndex(s => s.id === songId);
       if (index === -1) {
         return sendJson(res, 404, { ok: false, error: 'Song not found' });
@@ -307,7 +368,7 @@ const server = http.createServer(async (req, res) => {
       };
 
       songs[index] = updated;
-      writeSongsSafe(songs);
+      await writeSongs(songs);
       return sendJson(res, 200, { ok: true, message: 'Song updated successfully', song: updated });
     } catch (err) {
       return sendJson(res, 500, { ok: false, error: err.message || 'Server error' });
@@ -318,13 +379,17 @@ const server = http.createServer(async (req, res) => {
   if (pathname.startsWith('/api/songs/') && req.method === 'DELETE') {
     if (!requireAdmin(req, res)) return;
     const songId = pathname.replace('/api/songs/', '').trim();
-    const songs = readSongsSafe();
-    const filtered = songs.filter(s => s.id !== songId);
-    if (filtered.length === songs.length) {
-      return sendJson(res, 404, { ok: false, error: 'Song not found' });
+    try {
+      const songs = await readSongs();
+      const filtered = songs.filter(s => s.id !== songId);
+      if (filtered.length === songs.length) {
+        return sendJson(res, 404, { ok: false, error: 'Song not found' });
+      }
+      await writeSongs(filtered);
+      return sendJson(res, 200, { ok: true, message: 'Song deleted successfully', total: filtered.length });
+    } catch (err) {
+      return sendStorageError(res, err);
     }
-    writeSongsSafe(filtered);
-    return sendJson(res, 200, { ok: true, message: 'Song deleted successfully', total: filtered.length });
   }
 
   // Static file serving

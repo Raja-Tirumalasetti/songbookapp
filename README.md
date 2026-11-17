@@ -83,11 +83,17 @@ Then open your browser and navigate to:
 
 ---
 
-## 🌐 Deployment
+## 🌐 Deployment to Render
 
-The included `server.js` is a long-running Node.js HTTP server. Deploy it on a Node.js host that supports running this server and persistent storage for `songs.json`.
+Render runs the Node.js server, while Neon PostgreSQL stores songs persistently and shares updates with all visitors.
 
-Set `ADMIN_PASSWORD` in the host's environment configuration before deploying. It must contain at least 16 characters. Static-only hosting can serve the songbook, but administrator sign-in and song changes require the Node.js API. Vercel deployment needs an adapter for its function runtime and persistent storage; that adapter is not included here.
+1. Create a Neon project and copy its connection string.
+2. In Render, create or open the Web Service connected to this repository. Use build command `npm install` and start command `npm start`.
+3. In the service's **Environment** settings, add `DATABASE_URL` with the Neon connection string and `ADMIN_PASSWORD` with a unique password of at least 16 characters.
+4. Save the settings and deploy. The first API request creates the database table and seeds an empty database from `songs.json`.
+5. Open `your-render-url/#/admin` and sign in with the `ADMIN_PASSWORD` value. There is no admin username. Add, edit, delete, or import songs there; changes are saved in Neon and shared with every device.
+
+If the current Render instance has songs that are not in the checked-in `songs.json`, export them from Admin before switching to Neon. After deployment, import that JSON from Admin to move the catalog into the shared database. Keep the Neon connection string and admin password private; do not commit real values to `.env` or source control. Without `DATABASE_URL`, local development continues to use `songs.json`.
 
 ---
 
@@ -98,7 +104,7 @@ Set `ADMIN_PASSWORD` in the host's environment configuration before deploying. I
 - `extras.js` — Fullscreen Worship Mode and WakeLock
 - `extras.css` — Theme variables and Worship Mode styling
 - `server.js` — Lightweight Node.js server with REST API (`/api/songs`)
-- `songs.json` — Song database containing 117+ Christian worship songs
+- `songs.json` — Starter catalog used to initialize an empty database
 - `assets/logo_home.jpg` — First image: Church Emblem (Home page, header, splash)
 - `assets/bg_church.jpg` — Second image: Sacred Church Silhouette background watermark
 - `letter.txt` — Church Welcome Letter message

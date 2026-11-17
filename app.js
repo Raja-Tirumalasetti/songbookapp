@@ -134,10 +134,12 @@
 
   async function loadSongs() {
     let baseSongs = [];
+    let loadedFromServer = false;
     try {
       const r = await fetch('/api/songs').catch(() => null);
       if (r && r.ok) {
         baseSongs = await r.json();
+        loadedFromServer = Array.isArray(baseSongs);
       } else {
         const fileR = await fetch('songs.json');
         baseSongs = parseSongs(await fileR.text());
@@ -148,8 +150,8 @@
 
     if (!Array.isArray(baseSongs)) baseSongs = [];
 
-    const customSongs = LS.g('custom_songs', []);
-    const deletedIds = new Set(LS.g('deleted_songs', []));
+    const customSongs = loadedFromServer ? [] : LS.g('custom_songs', []);
+    const deletedIds = new Set(loadedFromServer ? [] : LS.g('deleted_songs', []));
 
     const mergedMap = new Map();
     baseSongs.forEach(s => {
@@ -819,6 +821,12 @@ You comforted me in the valley of tears.`
             if (res.ok) savedOnServer = true;
           } catch { }
 
+          if (!savedOnServer) {
+            toast('Could not update the song on the server. Please try again.');
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+          }
+
           const idx = songs.findIndex(s => s.id === editingSongId);
           if (idx !== -1) {
             songs[idx] = { ...songs[idx], ...songPayload };
@@ -831,7 +839,7 @@ You comforted me in the valley of tears.`
           LS.s('custom_songs', custom);
 
           rebuildIndex();
-          toast(`Song updated successfully! ${savedOnServer ? '✓ Server' : '✓ Local'}`);
+          toast('Song updated successfully!');
           editingSongId = null;
           adminActiveTab = 'list';
           render();
@@ -852,15 +860,9 @@ You comforted me in the valley of tears.`
           } catch { }
 
           if (!newSong) {
-            const rawId = slugify(title);
-            let id = rawId, c = 1;
-            while (songs.some(s => s.id === id)) id = `${rawId}-${c++}`;
-            newSong = {
-              id,
-              ...songPayload,
-              cover: Math.floor(Math.random() * 50) + 1,
-              addedAt: new Date().toISOString()
-            };
+            toast('Could not add the song to the server. Please try again.');
+            if (submitBtn) submitBtn.disabled = false;
+            return;
           }
 
           const custom = LS.g('custom_songs', []);
@@ -923,9 +925,14 @@ You comforted me in the valley of tears.`
             const songToDel = by[sid];
             if (!confirm(`Are you sure you want to delete "${songToDel ? songToDel.title : sid}"?`)) return;
 
+            let response;
             try {
-              await fetch(`/api/songs/${encodeURIComponent(sid)}`, { method: 'DELETE' });
+              response = await fetch(`/api/songs/${encodeURIComponent(sid)}`, { method: 'DELETE' });
             } catch { }
+            if (!response?.ok) {
+              toast('Could not delete the song from the server. Please try again.');
+              return;
+            }
 
             songs = songs.filter(s => s.id !== sid);
             const custom = LS.g('custom_songs', []).filter(s => s.id !== sid);
@@ -954,16 +961,21 @@ You comforted me in the valley of tears.`
     if (clearAllBtn) {
       clearAllBtn.onclick = async () => {
         if (!confirm('Are you sure you want to remove ALL songs from the songbook?')) return;
+        for (const songId of Object.keys(by)) {
+          let response;
+          try {
+            response = await fetch(`/api/songs/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+          } catch { }
+          if (!response?.ok) {
+            toast('Could not clear all songs from the server. Please try again.');
+            return;
+          }
+        }
         songs = [];
         LS.s('custom_songs', []);
         LS.s('cached_songs', []);
         LS.s('favs', []);
         favs = [];
-        try {
-          for (const s of Object.keys(by)) {
-            await fetch(`/api/songs/${encodeURIComponent(s)}`, { method: 'DELETE' }).catch(() => {});
-          }
-        } catch { }
         rebuildIndex();
         toast('All songs removed! The catalog is now clean.');
         render();
@@ -990,25 +1002,33 @@ You comforted me in the valley of tears.`
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = ev => {
+        reader.onload = async ev => {
           try {
             const imported = JSON.parse(ev.target.result);
             if (!Array.isArray(imported)) throw new Error('File does not contain a JSON array of songs');
 
-            const custom = LS.g('custom_songs', []);
-            imported.forEach(s => {
-              if (s.title && (s.lyrics?.te || s.lyrics?.rom)) {
-                if (!s.id) s.id = slugify(s.title);
-                custom.push(s);
+            const validSongs = imported.filter(song => song.title && (song.lyrics?.te || song.lyrics?.rom));
+            if (!validSongs.length) throw new Error('No songs with lyrics were found in the file');
+
+            for (const song of validSongs) {
+              const existingSong = song.id && by[song.id];
+              const endpoint = existingSong ? `/api/songs/${encodeURIComponent(song.id)}` : '/api/songs';
+              const response = await fetch(endpoint, {
+                method: existingSong ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...song, id: song.id || slugify(song.title) })
+              });
+              if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                throw new Error(result.error || 'The server rejected a song');
               }
-            });
-            LS.s('custom_songs', custom);
-            loadSongs().then(() => {
-              toast(`Successfully imported songs! Total: ${songs.length}`);
-              render();
-            });
+            }
+
+            await loadSongs();
+            toast(`Imported ${validSongs.length} songs to the shared library`);
+            render();
           } catch (err) {
-            alert('Failed to parse JSON: ' + err.message);
+            alert('Song import failed: ' + err.message);
           }
         };
         reader.readAsText(file);
