@@ -267,9 +267,8 @@
 
   /* Admin / Non-Admin Navbar Visibility */
   function updateAdminNavVisibility() {
-    const isAdm = isAdminUser();
     const navAdmin = $('#navAdminBtn');
-    if (navAdmin) navAdmin.hidden = !isAdm;
+    if (navAdmin) navAdmin.hidden = false;
   }
 
   /* ---------- Login System (Name & Phone Only - No Password) ---------- */
