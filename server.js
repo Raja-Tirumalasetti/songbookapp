@@ -5,7 +5,8 @@ const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
-const SONGS_FILE = path.join(PUBLIC_DIR, 'songs.json');
+const DEFAULT_SONGS_FILE = path.join(PUBLIC_DIR, 'songs.json');
+const SONGS_FILE = process.env.SONGS_FILE ? path.resolve(process.env.SONGS_FILE) : DEFAULT_SONGS_FILE;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const MIN_ADMIN_PASSWORD_LENGTH = 16;
 const ADMIN_SESSION_TTL = 12 * 60 * 60 * 1000;
@@ -32,7 +33,14 @@ const MIME_TYPES = {
 
 function readSongsSafe() {
   try {
-    if (!fs.existsSync(SONGS_FILE)) return [];
+    if (!fs.existsSync(SONGS_FILE)) {
+      fs.mkdirSync(path.dirname(SONGS_FILE), { recursive: true });
+      if (SONGS_FILE !== DEFAULT_SONGS_FILE && fs.existsSync(DEFAULT_SONGS_FILE)) {
+        fs.copyFileSync(DEFAULT_SONGS_FILE, SONGS_FILE);
+      } else {
+        return [];
+      }
+    }
     const content = fs.readFileSync(SONGS_FILE, 'utf8');
     return JSON.parse(content);
   } catch (err) {
