@@ -134,10 +134,12 @@
 
   async function loadSongs() {
     let baseSongs = [];
+    let loadedFromServer = false;
     try {
       const r = await fetch('/api/songs').catch(() => null);
       if (r && r.ok) {
         baseSongs = await r.json();
+        loadedFromServer = Array.isArray(baseSongs);
       } else {
         const fileR = await fetch('songs.json');
         baseSongs = parseSongs(await fileR.text());
@@ -148,8 +150,8 @@
 
     if (!Array.isArray(baseSongs)) baseSongs = [];
 
-    const customSongs = LS.g('custom_songs', []);
-    const deletedIds = new Set(LS.g('deleted_songs', []));
+    const customSongs = loadedFromServer ? [] : LS.g('custom_songs', []);
+    const deletedIds = new Set(loadedFromServer ? [] : LS.g('deleted_songs', []));
 
     const mergedMap = new Map();
     baseSongs.forEach(s => {
@@ -830,12 +832,6 @@ You comforted me in the valley of tears.`
             songs[idx] = { ...songs[idx], ...songPayload };
           }
 
-          const custom = LS.g('custom_songs', []);
-          const cIdx = custom.findIndex(s => s.id === editingSongId);
-          if (cIdx !== -1) custom[cIdx] = songs[idx];
-          else custom.push(songs[idx]);
-          LS.s('custom_songs', custom);
-
           rebuildIndex();
           toast('Song updated successfully!');
           editingSongId = null;
@@ -862,10 +858,6 @@ You comforted me in the valley of tears.`
             if (submitBtn) submitBtn.disabled = false;
             return;
           }
-
-          const custom = LS.g('custom_songs', []);
-          custom.unshift(newSong);
-          LS.s('custom_songs', custom);
 
           songs.unshift(newSong);
           rebuildIndex();
